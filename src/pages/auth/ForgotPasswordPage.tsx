@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { isAxiosError } from "axios";
 import { KeyRound, ReceiptIndianRupee } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -19,8 +20,11 @@ export function ForgotPasswordPage() {
       const response = await authApi.forgotPassword(email);
       setResetLink(response.reset_link ?? "");
       toast.success(response.message);
-    } catch {
-      toast.error("Unable to process password reset request");
+    } catch (error) {
+      const message = isAxiosError<{ detail?: string }>(error)
+        ? error.response?.data?.detail ?? "Unable to process password reset request"
+        : "Unable to process password reset request";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
