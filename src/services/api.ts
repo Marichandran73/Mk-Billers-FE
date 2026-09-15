@@ -7,7 +7,7 @@ import {
 } from "../utils/permissions";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:8000/api",
+  baseURL: import.meta.env.VITE_API_URL ?? "https://mk-billers-be.onrender.com/api",
 });
 
 function getRestrictionMessage(url: string, method: string): string | null {
