@@ -1,7 +1,17 @@
 import { api } from './api'
 import type { Customer } from '../types'
 
-export type CustomerPayload = Omit<Customer, 'id'>
+export interface CustomerPayload {
+  name: string
+  company_name: string
+  email: string
+  phone: string
+  address: string
+  gst_number: string
+  city: string
+  state: string
+  pincode: string
+}
 
 export const customerApi = {
   async list(search = '') {

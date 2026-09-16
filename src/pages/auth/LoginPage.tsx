@@ -67,7 +67,7 @@ export function LoginPage() {
               Login to MK-BILLERS
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Use company admin credentials to continue.
+              Use your invited company credentials to continue. No public registration.
             </p>
           </div>
           <label className="block text-sm font-medium text-slate-700">
@@ -119,6 +119,14 @@ export function LoginPage() {
               className="font-medium text-brand-700 underline"
             >
               Forgot password?
+            </Link>
+          </p>
+          <p className="mt-2 text-right text-sm text-slate-500">
+            <Link
+              to="/register"
+              className="font-medium text-brand-700 underline"
+            >
+              New company? Register here
             </Link>
           </p>
           <p className="mt-2 text-right text-sm text-slate-500">

@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Bill, BillPayload, BillStatus, PaginatedBills } from '../types'
+import type { Bill, BillPayload, PaginatedBills } from '../types'
 
 export interface BillFilters {
   page?: number
@@ -8,7 +8,6 @@ export interface BillFilters {
   month?: string
   year?: string
   customer_id?: string
-  status?: BillStatus | ''
 }
 
 export const billApi = {

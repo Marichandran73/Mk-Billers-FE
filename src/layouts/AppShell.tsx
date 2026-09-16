@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import {
-  Bell,
   Building2,
   ChevronLeft,
   ChevronRight,
+  Headset,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -18,7 +18,9 @@ import {
 import { toast } from "react-toastify";
 
 import { authApi } from "../services/authApi";
+import { settingsApi } from "../services/settingsApi";
 import type { User } from "../types";
+import { isStaffUser } from "../utils/permissions";
 import { BillFormPage } from "./app-shell/BillFormPage";
 import { BillsPage } from "./app-shell/BillsPage";
 import { BillViewPage } from "./app-shell/BillViewPage";
@@ -27,6 +29,7 @@ import { DashboardPage } from "./app-shell/DashboardPage";
 import { ReportsPage } from "./app-shell/ReportsPage";
 import { SettingsPage } from "./app-shell/SettingsPage";
 import { SuperAdminCompaniesPage } from "./app-shell/SuperAdminCompaniesPage";
+import { ContactPage } from "./app-shell/ContactPage";
 
 function getStoredUser() {
   const raw = localStorage.getItem("MKbillers_user");
@@ -38,6 +41,8 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<User | null>(getStoredUser());
+  const [invoiceLogo, setInvoiceLogo] = useState("");
+  const staffUser = isStaffUser();
 
   const sidebarCompanyName = user?.company?.name?.trim() || "MK-BILLERS";
   const sidebarSubtitle = user
@@ -52,6 +57,13 @@ export function AppShell() {
         localStorage.setItem("MKbillers_user", JSON.stringify(freshUser));
       })
       .catch(() => toast.error("Session expired. Please login again."));
+
+    settingsApi
+      .invoice()
+      .then((invoiceSettings) => setInvoiceLogo(invoiceSettings.logo ?? ""))
+      .catch(() => {
+        setInvoiceLogo("");
+      });
   }, []);
 
   const logout = () => {
@@ -69,9 +81,17 @@ export function AppShell() {
       >
         <div className="flex h-16 min-w-0 items-center justify-between border-b border-slate-200 px-3 sm:px-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-brand-600 text-white">
-              <ReceiptIndianRupee className="h-5 w-5" />
-            </div>
+            {invoiceLogo ? (
+              <img
+                className="h-10 w-10 rounded-md object-cover"
+                src={invoiceLogo}
+                alt="Company logo"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-brand-600 text-white">
+                <ReceiptIndianRupee className="h-5 w-5" />
+              </div>
+            )}
             {!collapsed && (
               <div>
                 <p className="font-semibold leading-none tracking-wide">
@@ -94,7 +114,10 @@ export function AppShell() {
             ["Dashboard", "/dashboard", LayoutDashboard],
             ["Bills", "/bills", FileText],
             ["Customers", "/customers", Users],
-            ["Reports", "/reports", FileSpreadsheet],
+            ...(user?.role !== "SUPER_ADMIN"
+              ? [["Contact", "/contact", Headset]]
+              : []),
+            ...(!staffUser ? [["Reports", "/reports", FileSpreadsheet]] : []),
             ["Settings", "/settings", Settings],
             ...(user?.role === "SUPER_ADMIN"
               ? [["Companies", "/super-admin/companies", Building2] as const]
@@ -156,7 +179,18 @@ export function AppShell() {
             >
               <Menu className="h-6 w-6" />
             </button>
-            <div className="min-w-0">
+            {/* {invoiceLogo ? (
+              <img
+                className="h-8 w-8 rounded-md object-cover"
+                src={invoiceLogo}
+                alt="Company logo"
+              />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-white">
+                <ReceiptIndianRupee className="h-4 w-4" />
+              </div>
+            )} */}
+            {/* <div className="min-w-0">
               <p className="truncate text-xs uppercase tracking-wide text-slate-500">
                 {user?.role === "SUPER_ADMIN"
                   ? "Super Admin Control Center"
@@ -165,15 +199,9 @@ export function AppShell() {
               <h1 className="truncate text-lg font-semibold">
                 {user?.company.name ?? "MK-BILLERS"}
               </h1>
-            </div>
+            </div> */}
           </div>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <button
-              className="rounded-md border border-slate-200 p-2"
-              aria-label="Notifications"
-            >
-              <Bell className="h-5 w-5 text-slate-500" />
-            </button>
             <div className="hidden items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-medium md:flex">
               <Building2 className="h-4 w-4 text-brand-600" />
               {user?.role ?? "ADMIN"}
@@ -188,8 +216,18 @@ export function AppShell() {
             <Route path="/bills/:id/edit" element={<BillFormPage />} />
             <Route path="/bills/:id" element={<BillViewPage />} />
             <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route
+              path="/contact"
+              element={user?.role === "SUPER_ADMIN" ? <Navigate to="/dashboard" replace /> : <ContactPage />}
+            />
+            <Route
+              path="/reports"
+              element={staffUser ? <Navigate to="/dashboard" replace /> : <ReportsPage />}
+            />
+            <Route
+              path="/settings"
+              element={<SettingsPage />}
+            />
             {user?.role === "SUPER_ADMIN" && (
               <Route
                 path="/super-admin/companies"

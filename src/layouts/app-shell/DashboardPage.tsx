@@ -4,9 +4,11 @@ import { toast } from "react-toastify";
 import { dashboardApi } from "../../services/dashboardApi";
 import type { DashboardStats } from "../../types";
 import { formatCurrency } from "../../utils/billing";
+import { getRestrictedActionMessage, isInactiveAdmin } from "../../utils/permissions";
 import { CreateBillButton } from "./CreateBillButton";
 import { EmptyState } from "./EmptyState";
-import { PageLoader } from "./PageLoader";
+// import { PageLoader } from "./PageLoader";
+import LoadingComp from "../../pages/ReusableCom/LoadingComp";
 import { PageTitle } from "./PageTitle";
 import { RecentBills } from "./RecentBills";
 import { StatCard } from "./StatCard";
@@ -15,6 +17,7 @@ import { StatCard } from "./StatCard";
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const adminRestricted = isInactiveAdmin();
 
   useEffect(() => {
     dashboardApi
@@ -24,7 +27,7 @@ export function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <PageLoader />;
+  if (loading) return <LoadingComp />;
   if (!stats)
     return (
       <EmptyState
@@ -40,7 +43,15 @@ export function DashboardPage() {
 
   return (
     <section className="space-y-6">
-      <PageTitle title="Dashboard" action={<CreateBillButton />} />
+      <PageTitle
+        title="Dashboard"
+        action={
+          <CreateBillButton
+            disabled={adminRestricted}
+            onBlocked={() => toast.error(getRestrictedActionMessage("create-bill"))}
+          />
+        }
+      />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Bills" value={stats.total_bills} />
         <StatCard

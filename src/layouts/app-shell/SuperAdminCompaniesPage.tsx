@@ -6,7 +6,8 @@ import { toast } from "react-toastify";
 import { authApi } from "../../services/authApi";
 import { formatCurrency } from "../../utils/billing";
 import { EmptyState } from "./EmptyState";
-import { PageLoader } from "./PageLoader";
+// import { PageLoader } from "./PageLoader";
+import LoadingComp from "../../pages/ReusableCom/LoadingComp";
 import { PageTitle } from "./PageTitle";
 import { StatCard } from "./StatCard";
 
@@ -29,11 +30,12 @@ export function SuperAdminCompaniesPage() {
     null,
   );
   const [loadingOverview, setLoadingOverview] = useState(true);
+  const [userSearch, setUserSearch] = useState("");
 
-  const loadOverview = async () => {
+  const loadOverview = async (searchText = userSearch) => {
     setLoadingOverview(true);
     try {
-      const data = await authApi.companiesOverview();
+      const data = await authApi.companiesOverview(searchText);
       setOverview(data);
       setSelectedCompanyId(
         (current) => current ?? data.companies[0]?.id ?? null,
@@ -46,8 +48,11 @@ export function SuperAdminCompaniesPage() {
   };
 
   useEffect(() => {
-    void loadOverview();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadOverview(userSearch);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [userSearch]);
 
   const createAccess = async (event: FormEvent) => {
     event.preventDefault();
@@ -166,7 +171,7 @@ export function SuperAdminCompaniesPage() {
       <div className="border-t border-slate-200 pt-6">
         <PageTitle title="Company Overview" />
         {loadingOverview ? (
-          <PageLoader />
+          <LoadingComp />
         ) : !overview || overview.companies.length === 0 ? (
           <EmptyState
             title="No companies found"
@@ -194,10 +199,104 @@ export function SuperAdminCompaniesPage() {
                 )}
               />
             </div>
-            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+            <div className="mt-5 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <h2 className="font-semibold">User List</h2>
+                <label className="label w-full max-w-sm">
+                  <span className="text-xs text-slate-500">Filter user</span>
+                  <input
+                    className="field mt-1"
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="Search by user email or company"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="py-2">Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Company</th>
+                      <th>Status</th>
+                      <th>Access Action</th>
+                      <th>Role Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.users.length === 0 ? (
+                      <tr>
+                        <td className="py-3 text-slate-500" colSpan={7}>
+                          No users found for this filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      overview.users.map((user) => (
+                        <tr className="border-b border-slate-100" key={user.id}>
+                          <td className="py-2 font-medium">{user.email.split("@")[0]}</td>
+                          <td>{user.email}</td>
+                          <td>{user.role}</td>
+                          <td>{user.company_name}</td>
+                          <td>{user.is_active ? "Active" : "Inactive"}</td>
+                          <td>
+                            {user.role === "SUPER_ADMIN" ? (
+                              <span className="text-xs text-slate-500">Not allowed</span>
+                            ) : (
+                              <button
+                                className="btn-secondary"
+                                onClick={async () => {
+                                  try {
+                                    const result = await authApi.updateUserAccessStatus(user.id, {
+                                      is_active: !user.is_active,
+                                    });
+                                    toast.success(result.message);
+                                    await loadOverview(userSearch);
+                                  } catch {
+                                    toast.error("Unable to update user access");
+                                  }
+                                }}
+                              >
+                                {user.is_active ? "Deactivate" : "Activate"}
+                              </button>
+                            )}
+                          </td>
+                          <td>
+                            {user.role === "SUPER_ADMIN" ? (
+                              <span className="text-xs text-slate-500">Not allowed</span>
+                            ) : (
+                              <button
+                                className="btn-secondary"
+                                onClick={async () => {
+                                  try {
+                                    const nextRole =
+                                      user.role === "ADMIN" ? "STAFF" : "ADMIN";
+                                    const result = await authApi.updateUserRole(user.id, {
+                                      role: nextRole,
+                                    });
+                                    toast.success(result.message);
+                                    await loadOverview(userSearch);
+                                  } catch {
+                                    toast.error("Unable to update user role");
+                                  }
+                                }}
+                              >
+                                Make {user.role === "ADMIN" ? "STAFF" : "ADMIN"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] h-[calc(70vh)] md:h-[calc(50vh)]">
               <div className="min-w-0 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <h2 className="font-semibold">Company List</h2>
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 space-y-2 h-[calc(60vh)]  overflow-y-scroll">
                   {overview.companies.map((company) => (
                     <button
                       className={`w-full rounded-md border p-3 text-left ${selectedCompanyId === company.id ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:bg-slate-50"}`}
@@ -227,7 +326,7 @@ export function SuperAdminCompaniesPage() {
                   (customer) => customer.company_id === company.id,
                 );
                 return (
-                  <div className="min-w-0 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="min-w-0 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5 h-[calc(70vh)] overflow-y-scroll">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h2 className="font-semibold">{company.name}</h2>

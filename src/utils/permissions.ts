@@ -1,6 +1,8 @@
 export const ADMIN_RESTRICTED_MESSAGE =
   "You don't have access to create user or report";
 
+export const STAFF_BILL_LIMIT = 6;
+
 export type RestrictedAction =
   | "create-user"
   | "edit-user"
@@ -43,4 +45,19 @@ export function isInactiveAdmin(): boolean {
   } catch {
     return false;
   }
+}
+
+export function isStaffUser(): boolean {
+  const rawUser = localStorage.getItem("MKbillers_user");
+  if (!rawUser) return false;
+  try {
+    const user = JSON.parse(rawUser) as { role?: string };
+    return user?.role === "STAFF";
+  } catch {
+    return false;
+  }
+}
+
+export function hasStaffReachedBillLimit(totalBills: number): boolean {
+  return isStaffUser() && totalBills >= STAFF_BILL_LIMIT;
 }

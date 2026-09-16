@@ -12,11 +12,12 @@ import type { Bill, InvoiceSettings, InvoiceTemplateId } from "../../types";
 import { amountToWords, formatCurrency, getUpiUrl } from "../../utils/billing";
 import {
   getRestrictedActionMessage,
+  hasStaffReachedBillLimit,
   isInactiveAdmin,
 } from "../../utils/permissions";
-import { PageLoader } from "./PageLoader";
+// import { PageLoader } from "./PageLoader";
+import LoadingComp from "../../pages/ReusableCom/LoadingComp";
 import { PageTitle } from "./PageTitle";
-import { StatusBadge } from "./StatusBadge";
 import { SummaryBox } from "./SummaryBox";
 import {
   defaultSettings,
@@ -32,6 +33,7 @@ export function BillViewPage() {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [bill, setBill] = useState<Bill | null>(null);
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
+  const [staffBillActionRestricted, setStaffBillActionRestricted] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<InvoiceTemplateId>(
     getStoredInvoiceTemplate,
   );
@@ -57,10 +59,17 @@ export function BillViewPage() {
         });
       })
       .catch(() => toast.error("Unable to load invoice"));
+
+    billApi
+      .list({ page: 1, limit: 1 })
+      .then((response) => setStaffBillActionRestricted(hasStaffReachedBillLimit(response.total)))
+      .catch(() => {
+        setStaffBillActionRestricted(false);
+      });
   }, [id]);
 
   const downloadPdf = async () => {
-    if (adminRestricted) {
+    if (adminRestricted || staffBillActionRestricted) {
       toast.error(getRestrictedActionMessage("download-report"));
       return;
     }
@@ -81,7 +90,7 @@ export function BillViewPage() {
     }
   };
 
-  if (!bill) return <PageLoader />;
+  if (!bill) return <LoadingComp />;
 
   return (
     <section className="space-y-5">
@@ -114,6 +123,10 @@ export function BillViewPage() {
               className="btn-secondary"
               onClick={() => {
                 if (adminRestricted) {
+                  toast.error(getRestrictedActionMessage("print-bill"));
+                  return;
+                }
+                if (staffBillActionRestricted) {
                   toast.error(getRestrictedActionMessage("print-bill"));
                   return;
                 }
@@ -215,9 +228,7 @@ function InvoicePreview({
             {bill.customer?.phone} {bill.customer?.email}
           </p>
         </div>
-        <div className="md:text-right">
-          <StatusBadge status={bill.status} />
-        </div>
+        <div className="md:text-right" />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">

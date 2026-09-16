@@ -3,13 +3,14 @@ import { toast } from "react-toastify";
 
 import {
   getRestrictedActionMessage,
+  isStaffUser,
   isInactiveAdmin,
 } from "../../utils/permissions";
 import { BillsPage } from "./BillsPage";
 import { EmptyState } from "./EmptyState";
 
 export function ReportsPage() {
-  const reportRestricted = isInactiveAdmin();
+  const reportRestricted = isInactiveAdmin() || isStaffUser();
 
   useEffect(() => {
     if (reportRestricted) {
@@ -21,7 +22,7 @@ export function ReportsPage() {
     return (
       <EmptyState
         title="Report access restricted"
-        description="Company is inactive. Admin cannot generate or download reports."
+        description="You do not have access to generate or download reports."
       />
     );
   }
