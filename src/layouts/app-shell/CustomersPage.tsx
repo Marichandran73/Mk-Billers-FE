@@ -12,6 +12,7 @@ import {
   isStaffUser,
   isInactiveAdmin,
 } from "../../utils/permissions";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "./EmptyState";
 import { PageTitle } from "./PageTitle";
 import { emptyCustomer } from "./shared";
@@ -22,6 +23,8 @@ export function CustomersPage() {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerPayload>(emptyCustomer);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const actionRestricted = isInactiveAdmin() || isStaffUser();
   const customerFields = Object.keys(emptyCustomer) as Array<keyof CustomerPayload>;
   const fieldConfig: Record<
@@ -203,18 +206,21 @@ export function CustomersPage() {
       toast.error(getRestrictedActionMessage("delete-user"));
       return;
     }
-    if (
-      !window.confirm(
-        `Delete ${customer.name}? Existing bills will keep their invoice records.`,
-      )
-    )
-      return;
+    setPendingDelete(customer);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await customerApi.remove(customer.id);
+      await customerApi.remove(pendingDelete.id);
       toast.success("Customer deleted successfully");
+      setPendingDelete(null);
       await load();
     } catch {
       toast.error("Unable to delete customer");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -344,6 +350,19 @@ export function CustomersPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete Customer"
+        message={
+          pendingDelete
+            ? `Delete ${pendingDelete.name}? Existing bills will keep their invoice records.`
+            : ""
+        }
+        confirmLabel="Delete Customer"
+        loading={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
     </section>
   );
 }

@@ -17,6 +17,7 @@ import { EmptyState } from "./EmptyState";
 import { IconLink } from "./IconLink";
 // import { PageLoader } from "./PageLoader";
 import LoadingComp from "../../pages/ReusableCom/LoadingComp";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageTitle } from "./PageTitle";
 
 type BillsPageProps = {
@@ -33,6 +34,8 @@ export function BillsPage({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filters, setFilters] = useState<BillFilters>({ page: 1, limit: 20 });
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<Bill | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const staffBillActionRestricted = hasStaffReachedBillLimit(total);
   const writeRestricted = isInactiveAdmin() || staffBillActionRestricted || restrictAllActions;
   const createRestricted = isInactiveAdmin() || staffBillActionRestricted || restrictAllActions;
@@ -123,18 +126,21 @@ export function BillsPage({
       toast.error(getRestrictedActionMessage("delete-bill"));
       return;
     }
-    if (
-      !window.confirm(
-        `Delete Invoice?\n\nAre you sure you want to delete ${bill.invoice_number}?\n\nThis action cannot be undone.`,
-      )
-    )
-      return;
+    setPendingDelete(bill);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await billApi.remove(bill.id);
+      await billApi.remove(pendingDelete.id);
       toast.success("Bill deleted successfully");
+      setPendingDelete(null);
       await load();
     } catch {
       toast.error("Unable to delete bill");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -290,6 +296,19 @@ export function BillsPage({
           <span>Page {filters.page ?? 1}</span>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete Invoice"
+        message={
+          pendingDelete
+            ? `Are you sure you want to delete ${pendingDelete.invoice_number}? This action cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete Invoice"
+        loading={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
     </section>
   );
 }
