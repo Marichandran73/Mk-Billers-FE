@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { isAxiosError } from "axios";
 import { ArrowLeft, FileText, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useNavigate, useParams } from "react-router-dom";
@@ -9,8 +10,10 @@ import { customerApi } from "../../services/customerApi";
 import type { BillItem, BillPayload, BillStatus, Customer } from "../../types";
 import { calculateBillTotals, formatCurrency } from "../../utils/billing";
 import {
-  getRestrictedActionMessage,
+  // getRestrictedActionMessage,
+  hasStaffReachedBillLimit,
   isInactiveAdmin,
+  isStaffUser,
 } from "../../utils/permissions";
 import { PageTitle } from "./PageTitle";
 import { SummaryBox } from "./SummaryBox";
@@ -31,7 +34,11 @@ export function BillFormPage() {
   const [discount, setDiscount] = useState(0);
   const [status, setStatus] = useState<BillStatus>("Pending");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [staffBillActionRestricted, setStaffBillActionRestricted] = useState(false);
   const adminRestricted = isInactiveAdmin();
+  const staffUser = isStaffUser();
+  const saveBlocked = adminRestricted || staffBillActionRestricted;
   const [items, setItems] = useState<Omit<BillItem, "id" | "amount">[]>([
     { ...emptyItem },
   ]);
@@ -67,6 +74,15 @@ export function BillFormPage() {
         })
         .catch(() => toast.error("Unable to load bill"));
     }
+
+    if (staffUser) {
+      billApi
+        .list({ page: 1, limit: 1 })
+        .then((response) =>
+          setStaffBillActionRestricted(hasStaffReachedBillLimit(response.total)),
+        )
+        .catch(() => setStaffBillActionRestricted(false));
+    }
   }, [id]);
 
   const totals = useMemo(
@@ -76,8 +92,8 @@ export function BillFormPage() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (adminRestricted) {
-      toast.error(getRestrictedActionMessage("save-bill"));
+    if (saveBlocked) {
+      toast.error("Save bill is disabled. Please contact MKBillers.");
       return;
     }
     if (!customerId) {
@@ -111,6 +127,7 @@ export function BillFormPage() {
       notes,
       items,
     };
+    setSaving(true);
     try {
       const bill = editing
         ? await billApi.update(Number(id), payload)
@@ -119,8 +136,17 @@ export function BillFormPage() {
         editing ? "Bill updated successfully" : "Bill created successfully",
       );
       navigate(`/bills/${bill.id}`);
-    } catch {
+    } catch (error) {
+      if (isAxiosError(error)) {
+        const detail = error.response?.data?.detail;
+        if (typeof detail === "string" && detail.trim()) {
+          toast.error(detail);
+          return;
+        }
+      }
       toast.error("Unable to save bill. Invoice number may already exist.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -156,8 +182,17 @@ export function BillFormPage() {
             >
               <ArrowLeft className="h-4 w-4" /> Back
             </button>
-            <button className="btn-primary" type="submit">
-              <FileText className="h-4 w-4" /> Save Bill
+            <button
+              className={`btn-primary ${saveBlocked ? "opacity-60" : ""}`}
+              type="submit"
+              disabled={saving}
+              onClick={(event) => {
+                if (!saveBlocked) return;
+                event.preventDefault();
+                toast.error("Save bill is disabled. Please contact MKBillers.");
+              }}
+            >
+              <FileText className="h-4 w-4" /> {saving ? "Saving..." : "Save Bill"}
             </button>
           </div>
         }
@@ -190,18 +225,6 @@ export function BillFormPage() {
             value={dueDate}
             onChange={(event) => setDueDate(event.target.value)}
           />
-        </label>
-        <label className="label">
-          Status
-          <select
-            className="field mt-1"
-            value={status}
-            onChange={(event) => setStatus(event.target.value as BillStatus)}
-          >
-            <option>Pending</option>
-            <option>Paid</option>
-            <option>Cancelled</option>
-          </select>
         </label>
         <label className="label lg:col-span-2">
           Customer
@@ -239,6 +262,20 @@ export function BillFormPage() {
             onChange={(event) => setDiscount(Number(event.target.value))}
           />
         </label>
+        {!staffUser && (
+          <label className="label">
+            Status
+            <select
+              className="field mt-1"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as BillStatus)}
+            >
+              <option value="Pending">Pending</option>
+              <option value="Paid">Done</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </label>
+        )}
       </div>
       <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">

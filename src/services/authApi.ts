@@ -23,7 +23,38 @@ export interface CompanyAccessStatusResponse {
   message: string;
 }
 
+export interface RoleUpdatePayload {
+  role: "ADMIN" | "STAFF";
+}
+
+export interface RoleUpdateResponse {
+  user_id: number;
+  email: string;
+  previous_role: string;
+  current_role: string;
+  message: string;
+}
+
+export interface UserAccessStatusPayload {
+  is_active: boolean;
+}
+
+export interface UserAccessStatusResponse {
+  user_id: number;
+  email: string;
+  is_active: boolean;
+  message: string;
+}
+
 export const authApi = {
+  async register(companyName: string, email: string, password: string) {
+    const { data } = await api.post<AuthResponse>("/auth/register", {
+      company_name: companyName,
+      email,
+      password,
+    });
+    return data;
+  },
   async login(email: string, password: string) {
     const { data } = await api.post<AuthResponse>("/auth/login", {
       email,
@@ -52,9 +83,12 @@ export const authApi = {
     );
     return data;
   },
-  async companiesOverview() {
+  async companiesOverview(userSearch?: string) {
     const { data } = await api.get<SuperAdminOverview>(
       "/auth/companies/overview",
+      {
+        params: userSearch?.trim() ? { user_search: userSearch.trim() } : {},
+      },
     );
     return data;
   },
@@ -67,6 +101,20 @@ export const authApi = {
   ) {
     const { data } = await api.patch<CompanyAccessStatusResponse>(
       `/auth/company-access/${companyId}/status`,
+      payload,
+    );
+    return data;
+  },
+  async updateUserRole(userId: number, payload: RoleUpdatePayload) {
+    const { data } = await api.patch<RoleUpdateResponse>(
+      `/auth/users/${userId}/role`,
+      payload,
+    );
+    return data;
+  },
+  async updateUserAccessStatus(userId: number, payload: UserAccessStatusPayload) {
+    const { data } = await api.patch<UserAccessStatusResponse>(
+      `/auth/users/${userId}/access`,
       payload,
     );
     return data;

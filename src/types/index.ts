@@ -73,6 +73,14 @@ export interface SuperAdminOverview {
     company_id: number;
     company_name: string;
   }[];
+  users: {
+    id: number;
+    email: string;
+    role: "SUPER_ADMIN" | "ADMIN" | "STAFF";
+    company_id: number;
+    company_name: string;
+    is_active: boolean;
+  }[];
 }
 
 export interface Customer {

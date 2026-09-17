@@ -1,6 +1,5 @@
 import type { Bill } from "../../types";
 import { formatCurrency } from "../../utils/billing";
-import { StatusBadge } from "./StatusBadge";
 
 export function RecentBills({ bills }: { bills: Bill[] }) {
   return (
@@ -14,7 +13,6 @@ export function RecentBills({ bills }: { bills: Bill[] }) {
               <th>Customer</th>
               <th>Date</th>
               <th>Total</th>
-              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -24,9 +22,6 @@ export function RecentBills({ bills }: { bills: Bill[] }) {
                 <td>{bill.customer?.name ?? "Deleted customer"}</td>
                 <td>{bill.invoice_date}</td>
                 <td>{formatCurrency(bill.grand_total)}</td>
-                <td>
-                  <StatusBadge status={bill.status} />
-                </td>
               </tr>
             ))}
           </tbody>

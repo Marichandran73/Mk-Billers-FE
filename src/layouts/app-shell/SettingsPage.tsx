@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "react-toastify";
 
+import { authApi } from "../../services/authApi";
 import { settingsApi } from "../../services/settingsApi";
 import type { InvoiceSettings, InvoiceTemplateId } from "../../types";
 import {
@@ -20,7 +21,8 @@ import {
 export function SettingsPage() {
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
   const [signatureMode, setSignatureMode] = useState<"text" | "image">("text");
-  const adminRestricted = isInactiveAdmin();
+  const [saving, setSaving] = useState(false);
+  const settingsRestricted = isInactiveAdmin();
   useEffect(() => {
     const defaultTemplate = getStoredInvoiceTemplate();
     settingsApi
@@ -47,12 +49,15 @@ export function SettingsPage() {
   }, []);
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (adminRestricted) {
+    if (settingsRestricted) {
       toast.error(getRestrictedActionMessage("save-settings"));
       return;
     }
+    setSaving(true);
     try {
       const updated = await settingsApi.updateInvoice(settings);
+      const freshUser = await authApi.me();
+      localStorage.setItem("MKbillers_user", JSON.stringify(freshUser));
       const template = INVOICE_TEMPLATE_OPTIONS.some(
         (option) => option.id === settings.invoice_template,
       )
@@ -67,6 +72,8 @@ export function SettingsPage() {
       toast.success("Invoice settings updated successfully");
     } catch {
       toast.error("Unable to save invoice settings");
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -77,8 +84,8 @@ export function SettingsPage() {
       <PageTitle
         title="Invoice Settings"
         action={
-          <button className="btn-primary">
-            <Settings className="h-4 w-4" /> Save Settings
+          <button className="btn-primary" disabled={saving}>
+            <Settings className="h-4 w-4" /> {saving ? "Submitting..." : "Save Settings"}
           </button>
         }
       />

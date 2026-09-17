@@ -7,7 +7,7 @@ import {
 } from "../utils/permissions";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "https://mk-billers-be.onrender.com/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
 });
 
 function getRestrictionMessage(url: string, method: string): string | null {
@@ -81,7 +81,7 @@ api.interceptors.response.use(
       localStorage.removeItem("MKbillers_user");
       localStorage.removeItem("fe_bills_token");
       localStorage.removeItem("fe_bills_user");
-      const publicAuthPaths = ["/login", "/forgot-password", "/set-password"];
+      const publicAuthPaths = ["/login", "/register", "/forgot-password", "/set-password"];
       if (!publicAuthPaths.includes(window.location.pathname)) {
         window.location.href = "/login";
       }

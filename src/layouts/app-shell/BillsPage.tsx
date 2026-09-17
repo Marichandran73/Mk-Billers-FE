@@ -5,18 +5,19 @@ import * as XLSX from "xlsx";
 
 import { billApi, type BillFilters } from "../../services/billApi";
 import { customerApi } from "../../services/customerApi";
-import type { Bill, BillStatus, Customer } from "../../types";
+import type { Bill, Customer } from "../../types";
 import { formatCurrency } from "../../utils/billing";
 import {
   getRestrictedActionMessage,
+  hasStaffReachedBillLimit,
   isInactiveAdmin,
 } from "../../utils/permissions";
 import { CreateBillButton } from "./CreateBillButton";
 import { EmptyState } from "./EmptyState";
 import { IconLink } from "./IconLink";
-import { PageLoader } from "./PageLoader";
+// import { PageLoader } from "./PageLoader";
+import LoadingComp from "../../pages/ReusableCom/LoadingComp";
 import { PageTitle } from "./PageTitle";
-import { StatusBadge } from "./StatusBadge";
 
 type BillsPageProps = {
   restrictReportGeneration?: boolean;
@@ -32,7 +33,9 @@ export function BillsPage({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filters, setFilters] = useState<BillFilters>({ page: 1, limit: 20 });
   const [loading, setLoading] = useState(true);
-  const adminRestricted = isInactiveAdmin() || restrictAllActions;
+  const staffBillActionRestricted = hasStaffReachedBillLimit(total);
+  const writeRestricted = isInactiveAdmin() || staffBillActionRestricted || restrictAllActions;
+  const createRestricted = isInactiveAdmin() || staffBillActionRestricted || restrictAllActions;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,27 +60,52 @@ export function BillsPage({
   }, [load]);
 
   const exportRows = (rows: Bill[], filename: string) => {
-    const sheet = XLSX.utils.json_to_sheet(
+    const billsSheet = XLSX.utils.json_to_sheet(
       rows.map((bill) => ({
         "Invoice Number": bill.invoice_number,
         "Invoice Date": bill.invoice_date,
         Customer: bill.customer?.name ?? "",
+        Notes: bill.notes,
+        
         Subtotal: bill.subtotal,
         CGST: bill.cgst,
         SGST: bill.sgst,
         Transportation: bill.transportation,
         Discount: bill.discount,
         "Grand Total": bill.grand_total,
-        Status: bill.status,
       })),
     );
+
+    const uniqueCustomers = new Map<number, Bill["customer"]>();
+    rows.forEach((bill) => {
+      if (bill.customer?.id != null && !uniqueCustomers.has(bill.customer.id)) {
+        uniqueCustomers.set(bill.customer.id, bill.customer);
+      }
+    });
+
+    const customersSheet = XLSX.utils.json_to_sheet(
+      Array.from(uniqueCustomers.values()).map((customer) => ({
+        "Customer ID": customer?.id ?? "",
+        "Customer Name": customer?.name ?? "",
+        "Customer Company": customer?.company_name ?? "",
+        "Customer Phone": customer?.phone ?? "",
+        "Customer Email": customer?.email ?? "",
+        "Customer Address": customer?.address ?? "",
+        "Customer GST": customer?.gst_number ?? "",
+        "Customer City": customer?.city ?? "",
+        "Customer State": customer?.state ?? "",
+        "Customer Pincode": customer?.pincode ?? "",
+      })),
+    );
+
     const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Bills");
+    XLSX.utils.book_append_sheet(book, billsSheet, "Bills");
+    XLSX.utils.book_append_sheet(book, customersSheet, "Customers");
     XLSX.writeFile(book, filename);
   };
 
   const exportFiltered = () => {
-    if (restrictReportGeneration || adminRestricted) {
+    if (restrictReportGeneration || writeRestricted) {
       toast.error(getRestrictedActionMessage("download-report"));
       return;
     }
@@ -91,7 +119,7 @@ export function BillsPage({
   };
 
   const remove = async (bill: Bill) => {
-    if (adminRestricted) {
+    if (writeRestricted) {
       toast.error(getRestrictedActionMessage("delete-bill"));
       return;
     }
@@ -120,7 +148,7 @@ export function BillsPage({
               <FileSpreadsheet className="h-4 w-4" /> Export Excel
             </button>
             <CreateBillButton
-              disabled={adminRestricted}
+              disabled={createRestricted}
               onBlocked={() =>
                 toast.error(getRestrictedActionMessage("create-bill"))
               }
@@ -173,30 +201,14 @@ export function BillsPage({
             </option>
           ))}
         </select>
-        <select
-          className="field"
-          value={filters.status ?? ""}
-          onChange={(event) =>
-            setFilters({
-              ...filters,
-              status: event.target.value as BillStatus | "",
-              page: 1,
-            })
-          }
-        >
-          <option value="">Status</option>
-          <option>Paid</option>
-          <option>Pending</option>
-          <option>Cancelled</option>
-        </select>
       </div>
       <div className="rounded-md border border-slate-200 bg-white shadow-sm">
         {loading ? (
-          <PageLoader />
+          <LoadingComp />
         ) : data.length === 0 ? (
           <EmptyState
-            title="No bills found"
             description="Create a bill or adjust filters."
+            title="No bills found"
           />
         ) : (
           <div className="overflow-x-auto">
@@ -212,7 +224,6 @@ export function BillsPage({
                     "GST",
                     "Discount",
                     "Grand Total",
-                    "Status",
                     "Actions",
                   ].map((heading) => (
                     <th className="px-4 py-3" key={heading}>
@@ -245,9 +256,6 @@ export function BillsPage({
                       {formatCurrency(bill.grand_total)}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={bill.status} />
-                    </td>
-                    <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <IconLink to={`/bills/${bill.id}`} label="View">
                           <FileText className="h-4 w-4" />
@@ -255,7 +263,7 @@ export function BillsPage({
                         <IconLink
                           to={`/bills/${bill.id}/edit`}
                           label="Edit"
-                          disabled={adminRestricted}
+                          disabled={writeRestricted}
                           onBlocked={() =>
                             toast.error(getRestrictedActionMessage("edit-bill"))
                           }
@@ -263,7 +271,7 @@ export function BillsPage({
                           <Edit className="h-4 w-4" />
                         </IconLink>
                         <button
-                          className={`icon-btn text-red-600 ${adminRestricted ? "opacity-50" : ""}`}
+                          className={`icon-btn text-red-600 ${writeRestricted ? "opacity-50" : ""}`}
                           onClick={() => remove(bill)}
                           aria-label="Delete"
                         >
