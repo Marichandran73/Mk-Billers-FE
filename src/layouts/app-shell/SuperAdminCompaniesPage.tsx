@@ -4,6 +4,7 @@ import { Building2, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { authApi } from "../../services/authApi";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { formatCurrency } from "../../utils/billing";
 import { EmptyState } from "./EmptyState";
 // import { PageLoader } from "./PageLoader";
@@ -31,6 +32,11 @@ export function SuperAdminCompaniesPage() {
   );
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [userSearch, setUserSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadOverview = async (searchText = userSearch) => {
     setLoadingOverview(true);
@@ -74,6 +80,21 @@ export function SuperAdminCompaniesPage() {
       toast.error("Unable to create company access");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const confirmDeleteAccess = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await authApi.deleteCompanyAccess(pendingDelete.id);
+      toast.success("Company access deleted");
+      setPendingDelete(null);
+      await loadOverview();
+    } catch {
+      toast.error("Unable to delete company access");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -356,19 +377,7 @@ export function SuperAdminCompaniesPage() {
                         <button
                           className="btn-secondary border-red-200 text-red-600 hover:bg-red-50"
                           onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Delete access for ${company.name}? All company data will be deleted.`,
-                              )
-                            )
-                              return;
-                            try {
-                              await authApi.deleteCompanyAccess(company.id);
-                              toast.success("Company access deleted");
-                              await loadOverview();
-                            } catch {
-                              toast.error("Unable to delete company access");
-                            }
+                            setPendingDelete({ id: company.id, name: company.name });
                           }}
                         >
                           <Trash2 className="h-4 w-4" /> Delete Access
@@ -437,6 +446,19 @@ export function SuperAdminCompaniesPage() {
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete Company Access"
+        message={
+          pendingDelete
+            ? `Delete access for ${pendingDelete.name}? All company data will be deleted.`
+            : ""
+        }
+        confirmLabel="Delete Access"
+        loading={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDeleteAccess}
+      />
     </section>
   );
 }
