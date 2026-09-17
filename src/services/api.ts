@@ -6,8 +6,37 @@ import {
   isInactiveAdmin,
 } from "../utils/permissions";
 
+const fallbackApiUrl = "https://mk-billers-be.onrender.com/api";
+const envApiUrl =
+  typeof import.meta.env.VITE_API_URL === "string"
+    ? import.meta.env.VITE_API_URL.trim()
+    : "";
+
+function resolveBaseApiUrl(rawUrl: string): string {
+  if (!rawUrl || !/^https?:\/\//i.test(rawUrl)) {
+    return fallbackApiUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
+      return fallbackApiUrl;
+    }
+
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+    const pathWithApi = normalizedPath.endsWith("/api")
+      ? normalizedPath
+      : `${normalizedPath}/api`;
+    return `${parsed.origin}${pathWithApi}`;
+  } catch {
+    return fallbackApiUrl;
+  }
+}
+
+const baseApiUrl = resolveBaseApiUrl(envApiUrl);
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ,
+  baseURL: baseApiUrl,
 });
 
 function getRestrictionMessage(url: string, method: string): string | null {
