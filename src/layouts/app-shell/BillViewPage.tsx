@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Download, Printer, ReceiptIndianRupee } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  Printer,
+  ReceiptIndianRupee,
+} from "lucide-react";
 import { toast } from "react-toastify";
 import { QRCodeSVG } from "qrcode.react";
 import jsPDF from "jspdf";
@@ -34,6 +40,7 @@ export function BillViewPage() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
   const [staffBillActionRestricted, setStaffBillActionRestricted] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<InvoiceTemplateId>(
     getStoredInvoiceTemplate,
   );
@@ -74,19 +81,87 @@ export function BillViewPage() {
       return;
     }
     if (!invoiceRef.current || !bill) return;
+    setIsDownloading(true);
     try {
-      const canvas = await html2canvas(invoiceRef.current, {
-        scale: 2,
-        backgroundColor: "#ffffff",
+      const invoiceNode = invoiceRef.current;
+      const captureHost = document.createElement("div");
+      captureHost.style.position = "fixed";
+      captureHost.style.left = "-10000px";
+      captureHost.style.top = "0";
+      captureHost.style.width = "794px";
+      captureHost.style.background = "#ffffff";
+      captureHost.style.opacity = "0";
+      captureHost.style.pointerEvents = "none";
+
+      const clonedInvoice = invoiceNode.cloneNode(true) as HTMLDivElement;
+      clonedInvoice.style.width = "794px";
+      clonedInvoice.style.maxWidth = "794px";
+      clonedInvoice.style.minHeight = "auto";
+      clonedInvoice.style.margin = "0";
+      clonedInvoice.style.boxShadow = "none";
+      clonedInvoice.style.overflow = "visible";
+
+      const cloneScrollContainers = Array.from(
+        clonedInvoice.querySelectorAll<HTMLElement>(".overflow-x-auto"),
+      );
+      const cloneTables = Array.from(clonedInvoice.querySelectorAll<HTMLTableElement>("table"));
+
+      cloneScrollContainers.forEach((node) => {
+        node.style.overflow = "visible";
       });
+
+      cloneTables.forEach((table) => {
+        table.style.minWidth = "0";
+        table.style.width = "100%";
+        table.style.tableLayout = "fixed";
+      });
+
+      captureHost.appendChild(clonedInvoice);
+      document.body.appendChild(captureHost);
+
+      const isMobile = window.matchMedia("(max-width: 768px)").matches;
+      const captureScale = isMobile ? 1.6 : 2;
+
+      const canvas = await (async () => {
+        try {
+          return await html2canvas(clonedInvoice, {
+            scale: captureScale,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            windowWidth: clonedInvoice.scrollWidth,
+            windowHeight: clonedInvoice.scrollHeight,
+            scrollX: 0,
+            scrollY: 0,
+          });
+        } finally {
+          captureHost.remove();
+        }
+      })();
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
-      const width = pdf.internal.pageSize.getWidth();
-      const height = (canvas.height * width) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imageHeight = (canvas.height * pageWidth) / canvas.width;
+
+      let heightLeft = imageHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, pageWidth, imageHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pageWidth, imageHeight);
+        heightLeft -= pageHeight;
+      }
+
       pdf.save(`${bill.invoice_number}.pdf`);
     } catch {
       toast.error("Failed PDF generation");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -135,8 +210,20 @@ export function BillViewPage() {
             >
               <Printer className="h-4 w-4" /> Print Bill
             </button>
-            <button className="btn-primary" onClick={downloadPdf}>
-              <Download className="h-4 w-4" /> Download PDF
+            <button
+              className="btn-primary"
+              onClick={downloadPdf}
+              disabled={isDownloading}
+            >
+              {isDownloading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Downloading...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" /> Download PDF
+                </>
+              )}
             </button>
           </div>
         }
