@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Company, InvoiceSettings } from '../types'
+import type { Company, InvoiceSettings, UserInvoiceTemplate } from '../types'
 
 export const settingsApi = {
   async company() {
@@ -16,6 +16,14 @@ export const settingsApi = {
   },
   async updateInvoice(payload: InvoiceSettings) {
     const { data } = await api.put<InvoiceSettings>('/settings/invoice', payload)
+    return data
+  },
+  async customTemplate() {
+    const { data } = await api.get<UserInvoiceTemplate>('/settings/custom-template')
+    return data
+  },
+  async updateCustomTemplate(payload: UserInvoiceTemplate) {
+    const { data } = await api.put<UserInvoiceTemplate>('/settings/custom-template', payload)
     return data
   },
 }
