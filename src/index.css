@@ -31,7 +31,7 @@ textarea {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 0;
   }
 
   .no-print {
@@ -40,6 +40,9 @@ textarea {
 
   body {
     background: #fff;
+    margin: 0 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .invoice-print {

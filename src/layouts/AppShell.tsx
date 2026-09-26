@@ -14,6 +14,7 @@ import {
   X,
   FileSpreadsheet,
   FileText,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -30,6 +31,8 @@ import { ReportsPage } from "./app-shell/ReportsPage";
 import { SettingsPage } from "./app-shell/SettingsPage";
 import { SuperAdminCompaniesPage } from "./app-shell/SuperAdminCompaniesPage";
 import { ContactPage } from "./app-shell/ContactPage";
+import { CustomTemplatePage } from "./app-shell/CustomTemplatePage";
+import { LetterPadPage } from "./app-shell/LetterPadPage";
 
 function getStoredUser() {
   const raw = localStorage.getItem("MKbillers_user");
@@ -114,6 +117,7 @@ export function AppShell() {
             ["Dashboard", "/dashboard", LayoutDashboard],
             ["Bills", "/bills", FileText],
             ["Customers", "/customers", Users],
+            ["Letter Pad", "/letters", ScrollText],
             ...(user?.role !== "SUPER_ADMIN"
               ? [["Contact", "/contact", Headset]]
               : []),
@@ -216,6 +220,7 @@ export function AppShell() {
             <Route path="/bills/:id/edit" element={<BillFormPage />} />
             <Route path="/bills/:id" element={<BillViewPage />} />
             <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/letters" element={<LetterPadPage />} />
             <Route
               path="/contact"
               element={user?.role === "SUPER_ADMIN" ? <Navigate to="/dashboard" replace /> : <ContactPage />}
@@ -227,6 +232,10 @@ export function AppShell() {
             <Route
               path="/settings"
               element={<SettingsPage />}
+            />
+            <Route
+              path="/settings/custom-template"
+              element={<CustomTemplatePage />}
             />
             {user?.role === "SUPER_ADMIN" && (
               <Route

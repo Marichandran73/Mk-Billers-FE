@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 import { authApi } from "../../services/authApi";
 import { settingsApi } from "../../services/settingsApi";
@@ -19,6 +20,7 @@ import {
 } from "./shared";
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
   const [signatureMode, setSignatureMode] = useState<"text" | "image">("text");
   const [saving, setSaving] = useState(false);
@@ -108,6 +110,18 @@ export function SettingsPage() {
           ))}
         </select>
       </label>
+      {settings.invoice_template === "template-custom" && (
+        <div className="rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
+          <p>Custom template is selected. Configure your personal layout before printing invoices.</p>
+          <button
+            className="btn-secondary mt-3"
+            onClick={() => navigate("/settings/custom-template")}
+            type="button"
+          >
+            Open Custom Template Editor
+          </button>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         {Object.keys(defaultSettings)
           .filter((key) => key !== "invoice_template")
@@ -189,11 +203,11 @@ export function SettingsPage() {
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (!file) return;
-                      if (file.size > 2 * 1024 * 1024) {
-                        toast.error("Logo image must be smaller than 2 MB");
-                        event.target.value = "";
-                        return;
-                      }
+                      // if (file.size > 2 * 1024 * 1024) {
+                      //   toast.error("Logo image must be smaller than 2 MB");
+                      //   event.target.value = "";
+                      //   return;
+                      // }
                       const reader = new FileReader();
                       reader.onload = () => {
                         if (typeof reader.result === "string") {

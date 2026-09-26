@@ -14,7 +14,12 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { billApi } from "../../services/billApi";
 import { settingsApi } from "../../services/settingsApi";
-import type { Bill, InvoiceSettings, InvoiceTemplateId } from "../../types";
+import type {
+  Bill,
+  InvoiceSettings,
+  InvoiceTemplateId,
+  UserInvoiceTemplate,
+} from "../../types";
 import { amountToWords, formatCurrency, getUpiUrl } from "../../utils/billing";
 import {
   getRestrictedActionMessage,
@@ -27,9 +32,11 @@ import { PageTitle } from "./PageTitle";
 import { SummaryBox } from "./SummaryBox";
 import {
   defaultSettings,
+  defaultUserCustomTemplate,
   getInvoiceTemplateClasses,
   getStoredInvoiceTemplate,
   INVOICE_TEMPLATE_OPTIONS,
+  normalizeUserCustomTemplate,
   TEMPLATE_STORAGE_KEY,
 } from "./shared";
 
@@ -41,6 +48,9 @@ export function BillViewPage() {
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
   const [staffBillActionRestricted, setStaffBillActionRestricted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [customTemplate, setCustomTemplate] = useState<UserInvoiceTemplate>(
+    defaultUserCustomTemplate,
+  );
   const [selectedTemplate, setSelectedTemplate] = useState<InvoiceTemplateId>(
     getStoredInvoiceTemplate,
   );
@@ -48,9 +58,14 @@ export function BillViewPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([billApi.get(Number(id)), settingsApi.invoice()])
-      .then(([billData, settingsData]) => {
+    Promise.all([
+      billApi.get(Number(id)),
+      settingsApi.invoice(),
+      settingsApi.customTemplate().catch(() => defaultUserCustomTemplate),
+    ])
+      .then(([billData, settingsData, customTemplateData]) => {
         setBill(billData);
+        setCustomTemplate(normalizeUserCustomTemplate(customTemplateData));
         const templateFromSettings = settingsData.invoice_template;
         const template = INVOICE_TEMPLATE_OPTIONS.some(
           (option) => option.id === templateFromSettings,
@@ -84,19 +99,35 @@ export function BillViewPage() {
     setIsDownloading(true);
     try {
       const invoiceNode = invoiceRef.current;
+      const sourceWidth = Math.max(
+        invoiceNode.scrollWidth,
+        invoiceNode.clientWidth,
+        Math.ceil(invoiceNode.getBoundingClientRect().width),
+      );
+      const sourceHeight = Math.max(
+        invoiceNode.scrollHeight,
+        invoiceNode.clientHeight,
+        Math.ceil(invoiceNode.getBoundingClientRect().height),
+      );
+
       const captureHost = document.createElement("div");
       captureHost.style.position = "fixed";
       captureHost.style.left = "-10000px";
       captureHost.style.top = "0";
-      captureHost.style.width = "794px";
+      captureHost.style.width = `${sourceWidth}px`;
       captureHost.style.background = "#ffffff";
       captureHost.style.opacity = "0";
       captureHost.style.pointerEvents = "none";
 
       const clonedInvoice = invoiceNode.cloneNode(true) as HTMLDivElement;
-      clonedInvoice.style.width = "794px";
-      clonedInvoice.style.maxWidth = "794px";
-      clonedInvoice.style.minHeight = "auto";
+      clonedInvoice.style.width = `${sourceWidth}px`;
+      clonedInvoice.style.maxWidth = `${sourceWidth}px`;
+      if (selectedTemplate === "template-custom") {
+        clonedInvoice.style.minHeight = `${sourceHeight}px`;
+        clonedInvoice.style.height = `${sourceHeight}px`;
+      } else {
+        clonedInvoice.style.minHeight = "auto";
+      }
       clonedInvoice.style.margin = "0";
       clonedInvoice.style.boxShadow = "none";
       clonedInvoice.style.overflow = "visible";
@@ -110,11 +141,13 @@ export function BillViewPage() {
         node.style.overflow = "visible";
       });
 
-      cloneTables.forEach((table) => {
-        table.style.minWidth = "0";
-        table.style.width = "100%";
-        table.style.tableLayout = "fixed";
-      });
+      if (selectedTemplate !== "template-custom") {
+        cloneTables.forEach((table) => {
+          table.style.minWidth = "0";
+          table.style.width = "100%";
+          table.style.tableLayout = "fixed";
+        });
+      }
 
       captureHost.appendChild(clonedInvoice);
       document.body.appendChild(captureHost);
@@ -128,8 +161,8 @@ export function BillViewPage() {
             scale: captureScale,
             backgroundColor: "#ffffff",
             useCORS: true,
-            windowWidth: clonedInvoice.scrollWidth,
-            windowHeight: clonedInvoice.scrollHeight,
+            windowWidth: sourceWidth,
+            windowHeight: sourceHeight,
             scrollX: 0,
             scrollY: 0,
           });
@@ -169,70 +202,73 @@ export function BillViewPage() {
 
   return (
     <section className="space-y-5">
-      <PageTitle
-        title={bill.invoice_number}
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="btn-secondary"
-              onClick={() => navigate("/bills")}
-            >
-              <ArrowLeft className="h-4 w-4" /> Back
-            </button>
-            <select
-              className="field min-w-56"
-              value={selectedTemplate}
-              onChange={(event) => {
-                const value = event.target.value as InvoiceTemplateId;
-                setSelectedTemplate(value);
-                localStorage.setItem(TEMPLATE_STORAGE_KEY, value);
-              }}
-            >
-              {INVOICE_TEMPLATE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                if (adminRestricted) {
-                  toast.error(getRestrictedActionMessage("print-bill"));
-                  return;
-                }
-                if (staffBillActionRestricted) {
-                  toast.error(getRestrictedActionMessage("print-bill"));
-                  return;
-                }
-                window.print();
-              }}
-            >
-              <Printer className="h-4 w-4" /> Print Bill
-            </button>
-            <button
-              className="btn-primary"
-              onClick={downloadPdf}
-              disabled={isDownloading}
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Downloading...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" /> Download PDF
-                </>
-              )}
-            </button>
-          </div>
-        }
-      />
+      <div className="no-print">
+        <PageTitle
+          title={bill.invoice_number}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn-secondary"
+                onClick={() => navigate("/bills")}
+              >
+                <ArrowLeft className="h-4 w-4" /> Back
+              </button>
+              <select
+                className="field min-w-56"
+                value={selectedTemplate}
+                onChange={(event) => {
+                  const value = event.target.value as InvoiceTemplateId;
+                  setSelectedTemplate(value);
+                  localStorage.setItem(TEMPLATE_STORAGE_KEY, value);
+                }}
+              >
+                {INVOICE_TEMPLATE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  if (adminRestricted) {
+                    toast.error(getRestrictedActionMessage("print-bill"));
+                    return;
+                  }
+                  if (staffBillActionRestricted) {
+                    toast.error(getRestrictedActionMessage("print-bill"));
+                    return;
+                  }
+                  window.print();
+                }}
+              >
+                <Printer className="h-4 w-4" /> Print Bill
+              </button>
+              <button
+                className="btn-primary"
+                onClick={downloadPdf}
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" /> Download PDF
+                  </>
+                )}
+              </button>
+            </div>
+          }
+        />
+      </div>
       <InvoicePreview
         bill={bill}
         settings={settings}
         refNode={invoiceRef}
         templateId={selectedTemplate}
+        customTemplate={customTemplate}
       />
     </section>
   );
@@ -243,12 +279,25 @@ function InvoicePreview({
   settings,
   refNode,
   templateId,
+  customTemplate,
 }: {
   bill: Bill;
   settings: InvoiceSettings;
   refNode: React.RefObject<HTMLDivElement | null>;
   templateId: InvoiceTemplateId;
+  customTemplate: UserInvoiceTemplate;
 }) {
+  if (templateId === "template-custom") {
+    return (
+      <CustomInvoicePreview
+        bill={bill}
+        settings={settings}
+        refNode={refNode}
+        customTemplate={customTemplate}
+      />
+    );
+  }
+
   const upiUrl = settings.upi_id
     ? getUpiUrl(settings.upi_id, settings.company_name, bill.grand_total)
     : "";
@@ -408,6 +457,237 @@ function InvoicePreview({
             settings.signature || "Authorized Signature"
           )}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function resolveCustomFieldValue(
+  key: string,
+  label: string,
+  bill: Bill,
+  settings: InvoiceSettings,
+): string {
+  const compactAddress = [bill.customer?.address, bill.customer?.city, bill.customer?.state]
+    .filter(Boolean)
+    .join(", ");
+  const map: Record<string, string> = {
+    company_name: settings.company_name,
+    company_address: settings.address ?? "",
+    company_phone: settings.phone ?? "",
+    company_email: settings.email ?? "",
+    company_gst: settings.gst_number ? `GST: ${settings.gst_number}` : "",
+    invoice_title: "INVOICE",
+    invoice_prefix: settings.invoice_prefix,
+    invoice_number_with_prefix: `${settings.invoice_prefix}-${bill.invoice_number}`,
+    invoice_number: bill.invoice_number,
+    invoice_date: `Date: ${bill.invoice_date}`,
+    due_date: `Due: ${bill.due_date || "-"}`,
+    bill_to: "Bill To",
+    customer_name: bill.customer?.name ?? "Deleted customer",
+    customer_address: compactAddress,
+    customer_phone: bill.customer?.phone ?? "",
+    customer_email: bill.customer?.email ?? "",
+    customer_gst: bill.customer?.gst_number ? `GST: ${bill.customer.gst_number}` : "",
+    subtotal: `Subtotal: ${formatCurrency(bill.subtotal)}`,
+    cgst: `CGST: ${formatCurrency(bill.cgst)}`,
+    sgst: `SGST: ${formatCurrency(bill.sgst)}`,
+    transportation: `Transportation: ${formatCurrency(bill.transportation)}`,
+    discount: `Discount: ${formatCurrency(bill.discount)}`,
+    total_label: "Grand Total",
+    grand_total: formatCurrency(bill.grand_total),
+    amount_words: amountToWords(bill.grand_total),
+    bank_details: settings.bank_details ?? "",
+    upi_id: settings.upi_id ?? "",
+    footer_text: settings.footer_text ?? "",
+    signature: settings.signature || "Authorized Signature",
+    notes: bill.notes ?? "",
+  };
+  return map[key] ?? label;
+}
+
+function CustomInvoicePreview({
+  bill,
+  settings,
+  refNode,
+  customTemplate,
+}: {
+  bill: Bill;
+  settings: InvoiceSettings;
+  refNode: React.RefObject<HTMLDivElement | null>;
+  customTemplate: UserInvoiceTemplate;
+}) {
+  const width = customTemplate.page_width || 794;
+  const height = customTemplate.page_height || 1123;
+
+  return (
+    <div className="invoice-print overflow-x-auto rounded-md border border-slate-200 bg-white p-3 shadow-soft sm:p-4">
+      <div
+        className="relative mx-auto bg-white"
+        ref={refNode}
+        style={{
+          width: `${width}px`,
+          minHeight: `${height}px`,
+        }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background: customTemplate.use_background_gradient
+              ? `linear-gradient(${customTemplate.background_gradient_angle ?? 180}deg, ${customTemplate.background_gradient_from ?? "#ffffff"}, ${customTemplate.background_gradient_to ?? "#f8fafc"})`
+              : "#ffffff",
+          }}
+        />
+        {customTemplate.background_image && (
+          <div className="absolute inset-0 overflow-hidden">
+            <img
+              alt="Background template"
+              className="h-full w-full"
+              src={customTemplate.background_image}
+              style={{
+                objectFit: customTemplate.background_fit,
+                objectPosition: `${customTemplate.background_x}% ${customTemplate.background_y}%`,
+                opacity: customTemplate.background_opacity,
+                transform: `scale(${customTemplate.background_zoom / 100})`,
+                transformOrigin: `${customTemplate.background_x}% ${customTemplate.background_y}%`,
+              }}
+            />
+          </div>
+        )}
+
+        {customTemplate.images.map((image) => (
+          <div
+            className="absolute overflow-hidden"
+            key={image.id}
+            style={{
+              left: `${image.x}px`,
+              top: `${image.y}px`,
+              width: `${image.width}px`,
+              height: `${image.height}px`,
+              opacity: image.opacity,
+              transform: `rotate(${image.rotation}deg)`,
+              transformOrigin: "center center",
+            }}
+          >
+            <img
+              alt="Template layer"
+              className="h-full w-full"
+              src={image.data_url}
+              style={{
+                objectFit: image.fit,
+                objectPosition: `${image.crop_x}% ${image.crop_y}%`,
+                transform: `scale(${image.zoom / 100})`,
+                transformOrigin: `${image.crop_x}% ${image.crop_y}%`,
+              }}
+            />
+          </div>
+        ))}
+
+        {customTemplate.fields.map((field) => {
+          if (field.key === "items_table") {
+            const tableTextColor = field.text_color ?? "#0f172a";
+            const tableFontFamily = field.font_family ?? "Poppins, sans-serif";
+            const tableFontWeight = field.font_weight ?? 500;
+            const tableFontSize = field.font_size ?? 11;
+            return (
+              <div
+                className="absolute overflow-hidden rounded border border-slate-300 bg-white"
+                key={field.key}
+                style={{
+                  left: `${field.x}px`,
+                  top: `${field.y}px`,
+                  width: `${field.width ?? 714}px`,
+                  minHeight: "150px",
+                  color: tableTextColor,
+                  fontFamily: tableFontFamily,
+                  fontStyle: field.font_style ?? "normal",
+                }}
+              >
+                <table className="w-full border-collapse text-left" style={{ fontSize: `${tableFontSize}px` }}>
+                  <thead>
+                    <tr className="border-b border-slate-300 bg-slate-100">
+                      <th className="px-2 py-1" style={{ width: "56px", fontWeight: tableFontWeight }}>S.No</th>
+                      <th className="px-2 py-1" style={{ fontWeight: tableFontWeight }}>Description</th>
+                      <th className="px-2 py-1 text-right" style={{ width: "80px", fontWeight: tableFontWeight }}>Qty</th>
+                      <th className="px-2 py-1 text-right" style={{ width: "110px", fontWeight: tableFontWeight }}>Rate</th>
+                      <th className="px-2 py-1 text-right" style={{ width: "120px", fontWeight: tableFontWeight }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bill.items.map((item, index) => (
+                      <tr className="border-b border-slate-200" key={`${item.description}-${index}`}>
+                        <td className="px-2 py-1.5">{index + 1}</td>
+                        <td className="px-2 py-1.5">{item.description}</td>
+                        <td className="px-2 py-1.5 text-right">{item.quantity}</td>
+                        <td className="px-2 py-1.5 text-right">{formatCurrency(item.rate)}</td>
+                        <td className="px-2 py-1.5 text-right">{formatCurrency(item.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+
+          if (field.key === "signature" && settings.signature?.startsWith("data:image/")) {
+            return (
+              <img
+                alt="Authorized signature"
+                className="absolute object-contain"
+                key={field.key}
+                src={settings.signature}
+                style={{
+                  left: `${field.x}px`,
+                  top: `${field.y}px`,
+                  width: `${field.width ?? 150}px`,
+                  height: "56px",
+                }}
+              />
+            );
+          }
+          if (field.key === "logo" && settings.logo) {
+            return (
+              <img
+                alt="Company logo"
+                className="absolute object-contain"
+                key={field.key}
+                src={settings.logo}
+                style={{
+                  left: `${field.x}px`,
+                  top: `${field.y}px`,
+                  width: `${field.width ?? 120}px`,
+                  height: "80px",
+                }}
+              />
+            );
+          }
+
+          return (
+            <p
+              className="absolute whitespace-pre-line break-words text-slate-900"
+              key={field.key}
+              style={{
+                left: `${field.x}px`,
+                top: `${field.y}px`,
+                width: `${field.width ?? 180}px`,
+                fontSize: `${field.font_size}px`,
+                textAlign: field.align,
+                fontFamily: field.font_family ?? "Poppins, sans-serif",
+                fontWeight: field.font_weight ?? 500,
+                fontStyle: field.font_style ?? "normal",
+                color: field.use_gradient ? "transparent" : (field.text_color ?? "#0f172a"),
+                backgroundImage: field.use_gradient
+                  ? `linear-gradient(${field.gradient_angle ?? 90}deg, ${field.gradient_from ?? "#0f172a"}, ${field.gradient_to ?? "#334155"})`
+                  : undefined,
+                WebkitBackgroundClip: field.use_gradient ? "text" : undefined,
+                backgroundClip: field.use_gradient ? "text" : undefined,
+                WebkitTextFillColor: field.use_gradient ? "transparent" : undefined,
+              }}
+            >
+              {resolveCustomFieldValue(field.key, field.label, bill, settings)}
+            </p>
+          );
+        })}
       </div>
     </div>
   );

@@ -10,7 +10,62 @@ export type InvoiceTemplateId =
   | "template-7"
   | "template-8"
   | "template-9"
-  | "template-10";
+  | "template-10"
+  | "template-custom";
+
+export type InvoiceFieldAlign = "left" | "center" | "right";
+export type InvoiceImageFit = "contain" | "cover";
+export type InvoiceFontStyle = "normal" | "italic";
+
+export interface UserInvoiceTemplateField {
+  key: string;
+  label: string;
+  x: number;
+  y: number;
+  font_size: number;
+  width?: number;
+  align: InvoiceFieldAlign;
+  font_family?: string;
+  font_weight?: number;
+  font_style?: InvoiceFontStyle;
+  text_color?: string;
+  use_gradient?: boolean;
+  gradient_from?: string;
+  gradient_to?: string;
+  gradient_angle?: number;
+}
+
+export interface UserInvoiceTemplateImage {
+  id: string;
+  data_url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fit: InvoiceImageFit;
+  crop_x: number;
+  crop_y: number;
+  zoom: number;
+  opacity: number;
+  rotation: number;
+}
+
+export interface UserInvoiceTemplate {
+  page_width: number;
+  page_height: number;
+  background_image?: string;
+  background_fit: InvoiceImageFit;
+  background_x: number;
+  background_y: number;
+  background_zoom: number;
+  background_opacity: number;
+  use_background_gradient?: boolean;
+  background_gradient_from?: string;
+  background_gradient_to?: string;
+  background_gradient_angle?: number;
+  fields: UserInvoiceTemplateField[];
+  images: UserInvoiceTemplateImage[];
+}
 
 export interface Company {
   id: number;
@@ -167,4 +222,24 @@ export interface PaginatedBills {
   total: number;
   page: number;
   limit: number;
+}
+
+export type LetterType = "QUOTATION" | "LETTER" | "CUSTOM";
+
+export interface LetterPadPayload {
+  customer_id?: number | null;
+  letter_type: LetterType;
+  title: string;
+  subject?: string;
+  content: string;
+  quotation_amount?: number | null;
+  valid_until?: string;
+  footer_text?: string;
+}
+
+export interface LetterPad extends LetterPadPayload {
+  id: number;
+  customer?: Customer | null;
+  created_at: string;
+  updated_at: string;
 }
