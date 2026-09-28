@@ -16,9 +16,11 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "./EmptyState";
 import { PageTitle } from "./PageTitle";
 import { emptyCustomer } from "./shared";
+import LoadingComp  from "../../pages/ReusableCom/LoadingComp";
 
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerPayload>(emptyCustomer);
@@ -136,14 +138,17 @@ export function CustomersPage() {
     return null;
   };
 
-  const load = useCallback(
-    () =>
-      customerApi
-        .list(search)
-        .then(setCustomers)
-        .catch(() => toast.error("Unable to load customers")),
-    [search],
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await customerApi.list(search);
+      setCustomers(list);
+    } catch {
+      toast.error("Unable to load customers");
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 250);
@@ -282,7 +287,9 @@ export function CustomersPage() {
             />
           }
         />
-        {customers.length === 0 ? (
+        {loading ? (
+          <LoadingComp/>
+        ) : customers.length === 0 ? (
           <EmptyState
             title="No customers"
             description="Add customers before creating bills."

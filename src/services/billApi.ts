@@ -1,5 +1,11 @@
 import { api } from './api'
-import type { Bill, BillPayload, PaginatedBills } from '../types'
+import type {
+  Bill,
+  BillPayload,
+  BillPaymentPayload,
+  BillPaymentSummary,
+  PaginatedBills,
+} from '../types'
 
 export interface BillFilters {
   page?: number
@@ -29,5 +35,13 @@ export const billApi = {
   },
   async remove(id: number) {
     await api.delete(`/bills/${id}`)
+  },
+  async payments(id: number) {
+    const { data } = await api.get<BillPaymentSummary>(`/bills/${id}/payments`)
+    return data
+  },
+  async addPayment(id: number, payload: BillPaymentPayload) {
+    const { data } = await api.post<BillPaymentSummary>(`/bills/${id}/payments`, payload)
+    return data
   },
 }
