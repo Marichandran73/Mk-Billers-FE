@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import { isAxiosError } from "axios";
 import {
   ArrowLeft,
   Download,
   Loader2,
+  Mail,
+  MessageCircle,
   Printer,
   ReceiptIndianRupee,
+  Wallet,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { QRCodeSVG } from "qrcode.react";
@@ -16,8 +21,10 @@ import { billApi } from "../../services/billApi";
 import { settingsApi } from "../../services/settingsApi";
 import type {
   Bill,
+  BillPaymentSummary,
   InvoiceSettings,
   InvoiceTemplateId,
+  PaymentMethod,
   UserInvoiceTemplate,
 } from "../../types";
 import { amountToWords, formatCurrency, getUpiUrl } from "../../utils/billing";
@@ -48,6 +55,13 @@ export function BillViewPage() {
   const [settings, setSettings] = useState<InvoiceSettings>(defaultSettings);
   const [staffBillActionRestricted, setStaffBillActionRestricted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [paymentSummary, setPaymentSummary] = useState<BillPaymentSummary | null>(null);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
   const [customTemplate, setCustomTemplate] = useState<UserInvoiceTemplate>(
     defaultUserCustomTemplate,
   );
@@ -56,15 +70,46 @@ export function BillViewPage() {
   );
   const adminRestricted = isInactiveAdmin();
 
+  const getShareMessage = () => {
+    if (!bill) return "";
+    const amountDue = paymentSummary?.outstanding_total ?? bill.grand_total;
+    return [
+      `Invoice ${bill.invoice_number} from ${settings.company_name}`,
+      `Customer: ${bill.customer?.name ?? "Customer"}`,
+      `Date: ${bill.invoice_date}`,
+      `Amount due: ${formatCurrency(amountDue)}`,
+      "Please find the invoice attached. Reply if you have any questions.",
+    ].join("\n");
+  };
+
+  const shareByWhatsApp = () => {
+    if (adminRestricted || staffBillActionRestricted) {
+      toast.error(getRestrictedActionMessage("download-report"));
+      return;
+    }
+    const phone = bill?.customer?.phone?.replace(/\D/g, "") ?? "";
+    const phoneParam = phone ? `&phone=${phone}` : "";
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(getShareMessage())}${phoneParam}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
   useEffect(() => {
     if (!id) return;
     Promise.all([
       billApi.get(Number(id)),
       settingsApi.invoice(),
       settingsApi.customTemplate().catch(() => defaultUserCustomTemplate),
+      billApi.payments(Number(id)).catch(() => null),
     ])
-      .then(([billData, settingsData, customTemplateData]) => {
+      .then(([billData, settingsData, customTemplateData, paymentData]) => {
         setBill(billData);
+        setPaymentSummary(paymentData);
+        if (paymentData && paymentData.outstanding_total > 0) {
+          setPaymentAmount(String(Number(paymentData.outstanding_total.toFixed(2))));
+        }
         setCustomTemplate(normalizeUserCustomTemplate(customTemplateData));
         const templateFromSettings = settingsData.invoice_template;
         const template = INVOICE_TEMPLATE_OPTIONS.some(
@@ -89,6 +134,54 @@ export function BillViewPage() {
         setStaffBillActionRestricted(false);
       });
   }, [id]);
+
+  const recordPayment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!bill) return;
+    if (adminRestricted || staffBillActionRestricted) {
+      toast.error("Payment recording is disabled for your account.");
+      return;
+    }
+
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid payment amount");
+      return;
+    }
+
+    setRecordingPayment(true);
+    try {
+      const summary = await billApi.addPayment(bill.id, {
+        amount,
+        paid_on: paymentDate,
+        payment_method: paymentMethod,
+        reference: paymentReference.trim() || undefined,
+        notes: paymentNotes.trim() || undefined,
+      });
+      setPaymentSummary(summary);
+      const freshBill = await billApi.get(bill.id);
+      setBill(freshBill);
+      setPaymentAmount(
+        summary.outstanding_total > 0
+          ? String(Number(summary.outstanding_total.toFixed(2)))
+          : "",
+      );
+      setPaymentReference("");
+      setPaymentNotes("");
+      toast.success("Payment recorded successfully");
+    } catch (error) {
+      if (isAxiosError(error)) {
+        const detail = error.response?.data?.detail;
+        if (typeof detail === "string" && detail.trim()) {
+          toast.error(detail);
+          return;
+        }
+      }
+      toast.error("Unable to record payment");
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
 
   const downloadPdf = async () => {
     if (adminRestricted || staffBillActionRestricted) {
@@ -245,6 +338,30 @@ export function BillViewPage() {
                 <Printer className="h-4 w-4" /> Print Bill
               </button>
               <button
+                className="btn-secondary"
+                onClick={shareByWhatsApp}
+                type="button"
+              >
+                <MessageCircle className="h-4 w-4" /> WhatsApp
+              </button>
+              <a
+                className="btn-secondary"
+                href={`mailto:${encodeURIComponent(bill.customer?.email ?? "")}?subject=${encodeURIComponent(`Invoice ${bill.invoice_number} from ${settings.company_name}`)}&body=${encodeURIComponent(getShareMessage())}`}
+                onClick={(event) => {
+                  if (!bill.customer?.email) {
+                    event.preventDefault();
+                    toast.error("Add an email address to this customer before sharing by email.");
+                    return;
+                  }
+                  if (adminRestricted || staffBillActionRestricted) {
+                    event.preventDefault();
+                    toast.error(getRestrictedActionMessage("download-report"));
+                  }
+                }}
+              >
+                <Mail className="h-4 w-4" /> Email
+              </a>
+              <button
                 className="btn-primary"
                 onClick={downloadPdf}
                 disabled={isDownloading}
@@ -263,6 +380,139 @@ export function BillViewPage() {
           }
         />
       </div>
+
+      {paymentSummary && (
+        <div className="no-print panel-surface p-5 sm:p-6">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grand Total</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(paymentSummary.grand_total)}</p>
+            </article>
+            <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Collected</p>
+              <p className="mt-1 text-lg font-bold text-emerald-700">{formatCurrency(paymentSummary.paid_total)}</p>
+            </article>
+            <article className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Outstanding</p>
+              <p className="mt-1 text-lg font-bold text-amber-700">{formatCurrency(paymentSummary.outstanding_total)}</p>
+            </article>
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Payment History</h3>
+              {paymentSummary.payments.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-500">No payments recorded yet.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-left text-sm">
+                    <thead className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="py-2">Date</th>
+                        <th className="py-2">Method</th>
+                        <th className="py-2">Reference</th>
+                        <th className="py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentSummary.payments.map((payment) => (
+                        <tr className="border-b border-slate-100" key={payment.id}>
+                          <td className="py-2">{payment.paid_on}</td>
+                          <td className="py-2">{payment.payment_method}</td>
+                          <td className="py-2">{payment.reference || "-"}</td>
+                          <td className="py-2 text-right font-semibold">{formatCurrency(payment.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <form className="rounded-lg border border-slate-200 bg-white p-4" onSubmit={recordPayment}>
+              <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                <Wallet className="h-4 w-4" /> Record Payment
+              </h3>
+              <div className="mt-3 space-y-3">
+                <label className="label">
+                  Amount
+                  <input
+                    className="field mt-1"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(event) => setPaymentAmount(event.target.value)}
+                    required
+                  />
+                </label>
+                <label className="label">
+                  Payment Date
+                  <input
+                    className="field mt-1"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(event) => setPaymentDate(event.target.value)}
+                    required
+                  />
+                </label>
+                <label className="label">
+                  Method
+                  <select
+                    className="field mt-1"
+                    value={paymentMethod}
+                    onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                  >
+                    {[
+                      "CASH",
+                      "BANK",
+                      "UPI",
+                      "CARD",
+                      "CHEQUE",
+                      "OTHER",
+                    ].map((method) => (
+                      <option key={method} value={method}>
+                        {method}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="label">
+                  Reference
+                  <input
+                    className="field mt-1"
+                    placeholder="Txn ID / cheque no."
+                    value={paymentReference}
+                    onChange={(event) => setPaymentReference(event.target.value)}
+                  />
+                </label>
+                <label className="label">
+                  Notes
+                  <textarea
+                    className="field mt-1"
+                    rows={2}
+                    value={paymentNotes}
+                    onChange={(event) => setPaymentNotes(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="btn-primary w-full"
+                  type="submit"
+                  disabled={
+                    recordingPayment ||
+                    paymentSummary.outstanding_total <= 0 ||
+                    adminRestricted ||
+                    staffBillActionRestricted
+                  }
+                >
+                  {recordingPayment ? "Recording..." : "Add Payment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <InvoicePreview
         bill={bill}
         settings={settings}

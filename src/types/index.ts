@@ -71,11 +71,48 @@ export interface Company {
   id: number;
   name: string;
   email: string;
+  plan_code?: string;
   is_active: boolean;
   phone?: string;
   address?: string;
   gst_number?: string;
   logo?: string;
+}
+
+export interface Plan {
+  code: "FREE" | "PRO" | "PREMIUM" | "BUSINESS";
+  name: string;
+  monthly_price_inr: number;
+  bill_limit?: number | null;
+  user_limit?: number | null;
+  features: string[];
+  rules: string[];
+  current: boolean;
+}
+
+export interface PlanUsage {
+  bills_used: number;
+  users_used: number;
+  bill_limit?: number | null;
+  user_limit?: number | null;
+  bill_usage_percent?: number | null;
+  user_usage_percent?: number | null;
+}
+
+export interface CurrentPlan {
+  code: "FREE" | "PRO" | "PREMIUM" | "BUSINESS";
+  name: string;
+  monthly_price_inr: number;
+  bill_limit?: number | null;
+  user_limit?: number | null;
+  features: string[];
+  rules: string[];
+  usage: PlanUsage;
+}
+
+export interface PlanSelectionResponse {
+  message: string;
+  current_plan: CurrentPlan;
 }
 
 export interface User {
@@ -177,6 +214,42 @@ export interface Bill {
   status: BillStatus;
   notes?: string;
   items: BillItem[];
+}
+
+export type PaymentMethod =
+  | "CASH"
+  | "BANK"
+  | "UPI"
+  | "CARD"
+  | "CHEQUE"
+  | "OTHER";
+
+export interface BillPayment {
+  id: number;
+  bill_id: number;
+  amount: number;
+  paid_on: string;
+  payment_method: PaymentMethod;
+  reference?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface BillPaymentPayload {
+  amount: number;
+  paid_on: string;
+  payment_method: PaymentMethod;
+  reference?: string;
+  notes?: string;
+}
+
+export interface BillPaymentSummary {
+  bill_id: number;
+  grand_total: number;
+  paid_total: number;
+  outstanding_total: number;
+  fully_paid: boolean;
+  payments: BillPayment[];
 }
 
 export interface BillPayload {

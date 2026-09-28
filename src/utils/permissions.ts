@@ -1,7 +1,12 @@
 export const ADMIN_RESTRICTED_MESSAGE =
   "You don't have access to create user or report";
 
-export const STAFF_BILL_LIMIT = 6;
+const PLAN_BILL_LIMITS: Record<string, number | null> = {
+  FREE: 6,
+  PRO: 200,
+  PREMIUM: 500,
+  BUSINESS: null,
+};
 
 export type RestrictedAction =
   | "create-user"
@@ -58,6 +63,25 @@ export function isStaffUser(): boolean {
   }
 }
 
+export function getCurrentPlanBillLimit(): number | null {
+  const rawUser = localStorage.getItem("MKbillers_user");
+  if (!rawUser) return PLAN_BILL_LIMITS.FREE;
+  try {
+    const user = JSON.parse(rawUser) as {
+      company?: { plan_code?: string };
+    };
+    const planCode = (user?.company?.plan_code ?? "FREE").toUpperCase();
+    return planCode in PLAN_BILL_LIMITS
+      ? PLAN_BILL_LIMITS[planCode]
+      : PLAN_BILL_LIMITS.FREE;
+  } catch {
+    return PLAN_BILL_LIMITS.FREE;
+  }
+}
+
 export function hasStaffReachedBillLimit(totalBills: number): boolean {
-  return isStaffUser() && totalBills >= STAFF_BILL_LIMIT;
+  if (!isStaffUser()) return false;
+  const planBillLimit = getCurrentPlanBillLimit();
+  if (planBillLimit == null) return false;
+  return totalBills >= planBillLimit;
 }
