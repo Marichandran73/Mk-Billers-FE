@@ -131,6 +131,7 @@ export interface AuthResponse {
 
 export interface ForgotPasswordResponse {
   message: string;
+  email_sent?: boolean;
   reset_link?: string;
 }
 
@@ -138,9 +139,33 @@ export interface InviteCompanyResponse {
   message: string;
   email: string;
   role: string;
+  email_sent?: boolean;
+  email_error?: string | null;
   setup_link?: string;
   verification_code?: string;
   expires_at: string;
+}
+
+export interface FounderPayload {
+  name: string;
+  designation: string;
+  about?: string | null;
+  sort_order: number;
+}
+
+export interface Founder extends FounderPayload {
+  id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EmailTemplateId ="classic" | "modern" | "minimal" | "bold";
+
+export interface EmailTemplate {
+  id: EmailTemplateId;
+  name: string;
+  description: string;
+  preview_html: string;
 }
 
 export interface CompanySummary {

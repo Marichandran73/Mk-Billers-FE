@@ -2,13 +2,14 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { isAxiosError } from "axios";
 import { KeyRound, ReceiptIndianRupee } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import DashboardLogo from "../../assets/Images/Dashboard-logo2.png";
 import { authApi } from "../../services/authApi";
 
 export function ForgotPasswordPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLink, setResetLink] = useState("");
@@ -19,7 +20,12 @@ export function ForgotPasswordPage() {
     try {
       const response = await authApi.forgotPassword(email);
       setResetLink(response.reset_link ?? "");
-      toast.success(response.message);
+      if (response.email_sent) {
+        toast.success(response.message);
+        navigate(`/set-password?email=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+      toast.warning(response.message);
     } catch (error) {
       const message = isAxiosError<{ detail?: string }>(error)
         ? error.response?.data?.detail ?? "Unable to process password reset request"
@@ -52,7 +58,7 @@ export function ForgotPasswordPage() {
               Reset Password
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Enter your email and we will generate a secure reset link.
+              Enter your email and we will send you a one-time OTP.
             </p>
           </div>
 
@@ -71,7 +77,7 @@ export function ForgotPasswordPage() {
             className="mt-6 w-full rounded-md bg-brand-600 px-4 py-2.5 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
             disabled={loading}
           >
-            {loading ? "Generating link..." : "Generate Reset Link"}
+            {loading ? "Sending OTP..." : "Send OTP"}
           </button>
 
           {resetLink && (
