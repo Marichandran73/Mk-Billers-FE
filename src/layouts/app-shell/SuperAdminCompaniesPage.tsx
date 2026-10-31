@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { isAxiosError } from "axios";
 import { Building2, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { authApi } from "../../services/authApi";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EmailTemplatePicker } from "../../components/EmailTemplatePicker";
+import { InviteResultCard } from "../../components/InviteResultCard";
+import type { EmailTemplateId, InviteCompanyResponse } from "../../types";
+import { getStoredEmailTemplate } from "../../utils/emailTemplates";
 import { formatCurrency } from "../../utils/billing";
 import { EmptyState } from "./EmptyState";
+import { FoundersManager } from "./FoundersManager";
 // import { PageLoader } from "./PageLoader";
 import LoadingComp from "../../pages/ReusableCom/LoadingComp";
 import { PageTitle } from "./PageTitle";
@@ -17,13 +23,10 @@ export function SuperAdminCompaniesPage() {
   const [companyEmail, setCompanyEmail] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{
-    message: string;
-    email: string;
-    verification_code?: string;
-    setup_link?: string;
-    expires_at: string;
-  } | null>(null);
+  const [emailTemplate, setEmailTemplate] = useState<EmailTemplateId>(
+    getStoredEmailTemplate,
+  );
+  const [result, setResult] = useState<InviteCompanyResponse | null>(null);
   const [overview, setOverview] = useState<Awaited<
     ReturnType<typeof authApi.companiesOverview>
   > | null>(null);
@@ -69,15 +72,25 @@ export function SuperAdminCompaniesPage() {
         company_name: companyName.trim(),
         company_email: companyEmail.trim(),
         admin_email: adminEmail.trim(),
+        email_template: emailTemplate,
       });
       setResult(response);
       setCompanyName("");
       setCompanyEmail("");
       setAdminEmail("");
-      toast.success("Company access created");
+      if (response.email_sent) {
+        toast.success("Company created and OTP sent");
+      } else {
+        toast.warning("Company created, but email was not sent");
+      }
       await loadOverview();
-    } catch {
-      toast.error("Unable to create company access");
+    } catch (error) {
+      const detail = isAxiosError<{ detail?: string }>(error)
+        ? error.response?.data?.detail
+        : undefined;
+      toast.error(
+        typeof detail === "string" ? detail : "Unable to create company access",
+      );
     } finally {
       setLoading(false);
     }
@@ -125,8 +138,8 @@ export function SuperAdminCompaniesPage() {
         onSubmit={createAccess}
       >
         <p className="text-sm text-slate-500 md:col-span-2">
-          Create a separate company workspace. The company email will receive a
-          one-time OTP for password setup.
+          Create a separate company workspace. The admin login email will
+          receive a one-time OTP for password setup.
         </p>
         <label className="label">
           Company Name
@@ -158,37 +171,19 @@ export function SuperAdminCompaniesPage() {
             required
           />
         </label>
+        <div className="md:col-span-2">
+          <EmailTemplatePicker
+            purpose="company"
+            value={emailTemplate}
+            onChange={setEmailTemplate}
+          />
+        </div>
         <button className="btn-primary md:col-span-2" disabled={loading}>
           <Building2 className="h-4 w-4" />
           {loading ? "Creating..." : "Create Company and Send OTP"}
         </button>
       </form>
-      {result && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-5 text-sm">
-          <p className="font-semibold text-emerald-800">{result.message}</p>
-          <p className="mt-2 text-emerald-700">
-            OTP recipient: Company Email ({result.email}). The code expires at{" "}
-            {result.expires_at}.
-          </p>
-          {result.verification_code && (
-            <p className="mt-3 font-mono text-lg text-emerald-900">
-              Development OTP: {result.verification_code}
-            </p>
-          )}
-          {result.setup_link && (
-            <a
-              className="mt-2 block break-all text-emerald-800 underline"
-              href={result.setup_link}
-            >
-              Open password setup
-            </a>
-          )}
-          <p className="mt-3 text-emerald-700">
-            The company admin must enter the OTP, create a password, and confirm
-            the password on the setup page.
-          </p>
-        </div>
-      )}
+      {result && <InviteResultCard result={result} />}
       <div className="border-t border-slate-200 pt-6">
         <PageTitle title="Company Overview" />
         {loadingOverview ? (
@@ -314,10 +309,10 @@ export function SuperAdminCompaniesPage() {
                 </table>
               </div>
             </div>
-            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] h-[calc(70vh)] md:h-[calc(50vh)]">
-              <div className="min-w-0 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+              <div className="flex max-h-[70vh] min-w-0 flex-col rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <h2 className="font-semibold">Company List</h2>
-                <div className="mt-4 space-y-2 h-[calc(60vh)]  overflow-y-scroll">
+                <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                   {overview.companies.map((company) => (
                     <button
                       className={`w-full rounded-md border p-3 text-left ${selectedCompanyId === company.id ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:bg-slate-50"}`}
@@ -347,7 +342,7 @@ export function SuperAdminCompaniesPage() {
                   (customer) => customer.company_id === company.id,
                 );
                 return (
-                  <div className="min-w-0 rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5 h-[calc(70vh)] overflow-y-scroll">
+                  <div className="max-h-[70vh] min-w-0 overflow-y-auto rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h2 className="font-semibold">{company.name}</h2>
@@ -459,6 +454,7 @@ export function SuperAdminCompaniesPage() {
         onCancel={() => setPendingDelete(null)}
         onConfirm={confirmDeleteAccess}
       />
+      <FoundersManager />
     </section>
   );
 }

@@ -1,6 +1,8 @@
 import { api } from "./api";
 import type {
   AuthResponse,
+  EmailTemplate,
+  EmailTemplateId,
   ForgotPasswordResponse,
   InviteCompanyResponse,
   SuperAdminOverview,
@@ -11,6 +13,13 @@ export interface InviteCompanyPayload {
   company_name: string;
   company_email: string;
   admin_email: string;
+  email_template?: EmailTemplateId;
+}
+
+export interface InviteUserPayload {
+  email: string;
+  role: "ADMIN" | "STAFF";
+  email_template?: EmailTemplateId;
 }
 
 export interface CompanyAccessStatusPayload {
@@ -69,11 +78,25 @@ export const authApi = {
     );
     return data;
   },
-  async setupPassword(token: string, password: string) {
+  async setupPassword(email: string, token: string, password: string) {
     const { data } = await api.post<AuthResponse>("/auth/setup-password", {
+      email,
       token,
       password,
     });
+    return data;
+  },
+  async emailTemplates(purpose: "invite" | "company" | "reset" = "invite") {
+    const { data } = await api.get<EmailTemplate[]>("/auth/email-templates", {
+      params: { purpose },
+    });
+    return data;
+  },
+  async inviteUser(payload: InviteUserPayload) {
+    const { data } = await api.post<InviteCompanyResponse>(
+      "/auth/invite",
+      payload,
+    );
     return data;
   },
   async createCompanyAccess(payload: InviteCompanyPayload) {

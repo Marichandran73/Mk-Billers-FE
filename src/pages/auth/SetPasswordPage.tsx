@@ -10,6 +10,7 @@ import { authApi } from "../../services/authApi";
 export function SetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [tokenInput, setTokenInput] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -23,8 +24,12 @@ export function SetPasswordPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) {
-      toast.error("Invalid setup link");
+    if (!email.trim()) {
+      toast.error("Enter your email");
+      return;
+    }
+    if (!/^\d{6}$/.test(token)) {
+      toast.error("Enter the 6-digit OTP from your email");
       return;
     }
     if (password.length < 8) {
@@ -38,13 +43,17 @@ export function SetPasswordPage() {
 
     setLoading(true);
     try {
-      const response = await authApi.setupPassword(token, password);
+      const response = await authApi.setupPassword(
+        email.trim(),
+        token,
+        password,
+      );
       localStorage.setItem("MKbillers_token", response.access_token);
       localStorage.setItem("MKbillers_user", JSON.stringify(response.user));
       toast.success("Password set successfully");
       navigate("/dashboard");
     } catch {
-      toast.error("This setup link is invalid or expired");
+      toast.error("OTP is invalid or expired for this email");
     } finally {
       setLoading(false);
     }
@@ -77,13 +86,30 @@ export function SetPasswordPage() {
           </div>
 
           <label className="block text-sm font-medium text-slate-700">
-            Verification Code
+            Email
             <input
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-              value={tokenFromQuery || tokenInput}
-              onChange={(event) => setTokenInput(event.target.value)}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               required
+              type="email"
+            />
+          </label>
+
+          <label className="mt-4 block text-sm font-medium text-slate-700">
+            OTP
+            <input
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-center font-mono text-xl tracking-[0.5em] outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              value={tokenFromQuery || tokenInput}
+              onChange={(event) =>
+                setTokenInput(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              required
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="------"
               minLength={6}
+              maxLength={6}
               disabled={Boolean(tokenFromQuery)}
             />
           </label>

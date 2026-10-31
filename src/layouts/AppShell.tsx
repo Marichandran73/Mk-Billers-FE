@@ -12,6 +12,7 @@ import {
   Menu,
   ReceiptIndianRupee,
   Settings,
+  UserPlus,
   Users,
   X,
   FileSpreadsheet,
@@ -38,6 +39,7 @@ import { LetterPadPage } from "./app-shell/LetterPadPage";
 import { PlansPage } from "./app-shell/PlansPage";
 import { ReconciliationPage } from "./app-shell/ReconciliationPage";
 import { GstReportsPage } from "./app-shell/GstReportsPage";
+import { TeamPage } from "./app-shell/TeamPage";
 
 function getStoredUser() {
   const raw = localStorage.getItem("MKbillers_user");
@@ -128,6 +130,9 @@ export function AppShell() {
               : []),
             ...(!staffUser ? [["Reports", "/reports", FileSpreadsheet]] : []),
             ["Settings", "/settings", Settings],
+            ...(user?.role === "SUPER_ADMIN"
+              ? [["Team", "/team", UserPlus]]
+              : []),
             ...(user?.role !== "SUPER_ADMIN"
               ? [["Plans", "/plans", BadgeIndianRupee]]
               : []),
@@ -246,6 +251,10 @@ export function AppShell() {
             <Route
               path="/settings"
               element={<SettingsPage />}
+            />
+            <Route
+              path="/team"
+              element={user?.role === "SUPER_ADMIN" ? <TeamPage /> : <Navigate to="/dashboard" replace />}
             />
             <Route
               path="/plans"
